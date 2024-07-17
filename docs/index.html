@@ -1,29 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-    <meta charset="utf-8" />
-    <title>Canvas Workspace</title>
- 
-    <link rel="stylesheet" href="styles/main.css">
+    <head>
+        <meta charset="utf-8" />
+        <title>Canvas Workspace</title>
 
-</head>
-<body>
-    <div>
-    <div id="container">
-        <canvas id="myCanvas" width="800" height="600"></canvas>
-        <div id="wastedOverlay">
-            <Text id="wastedText">WASTED</Text>
-            <Text id="finalPoints"></Text>
-            <Text id="playAgainText">Play Again</Text>
+        <link rel="stylesheet" href="styles/main.css" />
+    </head>
+    <body>
+        <div>
+            <div id="container">
+                <canvas id="myCanvas" width="800" height="600"></canvas>
+                <div id="wastedOverlay">
+                    <Text id="wastedText">WASTED</Text>
+                    <Text id="finalPoints"></Text>
+                    <Text id="playAgainText">Play Again</Text>
+                </div>
+            </div>
         </div>
-    </div>
-</div>
 
-<button id="pauseButton">Pause</button>
-<Text id="angle"></Text>
-<Text id="acc"></Text>
-<Text id="points"></Text>
-<script type="text/javascript" src="index.js"></script>
-
-</body>
+        <button id="pauseButton">Pause</button>
+        <Text id="angle"></Text>
+        <Text id="acc"></Text>
+        <Text id="points"></Text>
+        <script type="module" src="index.js"></script>
+    </body>
 </html>
