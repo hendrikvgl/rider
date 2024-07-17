@@ -1,15 +1,34 @@
-let isPaused = false;
+import { fromEvent, interval, BehaviorSubject, combineLatest } from 'rxjs';
+import { tap, scan, startWith, filter } from 'rxjs/operators';
+import {
+    calcMotion,
+    rectCircleColliding,
+    getRandomInt,
+    calcPlayerMotion,
+} from './utils.js';
+import { clearCanvas, drawCircle, drawRect } from './rendering.js';
+import { INITIAL_ENTITIES } from './entities.js';
+
+console.log('hello world');
+
+let togglePause$ = new BehaviorSubject();
+let isPaused$ = togglePause$.pipe(
+    scan((previous) => !previous, false),
+    startWith(false)
+);
 
 var pauseButton = document.getElementById('pauseButton');
-pauseButton.onclick = () => {
-    isPaused = !isPaused;
-};
 
-var canvas = document.getElementById('myCanvas');
-var ctx = canvas.getContext('2d');
+fromEvent(pauseButton, 'click')
+    .pipe(
+        tap(() => {
+            togglePause$.next();
+        })
+    )
+    .subscribe();
+
 const canvasHeight = 600;
 const canvasWidth = 800;
-const topSpeed = 3;
 
 const wastedOverlay = document.getElementById('wastedOverlay');
 const playAgainButton = document.getElementById('playAgainText');
@@ -34,72 +53,8 @@ const movement = {
 let entities = [];
 
 const setUpGame = () => {
-    isPaused = false;
-    entities = [
-        {
-            x: 1,
-            y: 1,
-            h: 100,
-            w: 50,
-            dx: 0.4,
-            dy: 0.8,
-            color: 'red',
-        },
-        {
-            x: 580,
-            y: 20,
-            h: 50,
-            w: 50,
-            dx: 0.6,
-            dy: 0.4,
-            color: 'red',
-        },
-        {
-            x: 700,
-            y: 200,
-            h: 70,
-            w: 90,
-            dx: -0.1,
-            dy: -0.1,
-            color: 'red',
-        },
-        {
-            x: 400,
-            y: 400,
-            h: 50,
-            w: 50,
-            dx: 1,
-            dy: -1,
-            color: 'red',
-        },
-        {
-            x: 500,
-            y: 100,
-            h: 30,
-            w: 150,
-            dx: 0.8,
-            dy: -0.6,
-            color: 'red',
-        },
-        {
-            x: 150,
-            y: 400,
-            h: 80,
-            w: 20,
-            dx: -0.9,
-            dy: 0.3,
-            color: 'red',
-        },
-        {
-            x: 650,
-            y: 500,
-            h: 50,
-            w: 50,
-            dx: 1,
-            dy: -0.95,
-            color: 'red',
-        },
-    ];
+    isPaused$.next(false);
+    entities = [...INITIAL_ENTITIES];
 
     player = {
         x: canvasWidth / 2,
@@ -117,13 +72,12 @@ const setUpGame = () => {
 const restart = () => {
     setUpGame();
     wastedOverlay.style.display = 'none';
-    isPaused = false;
+    isPaused$.next(false);
 };
 
 playAgainButton.onclick = restart;
 
 const onKeyDown = ({ code }) => {
-    console.log(code);
     if (code === 'KeyW' || code === 'ArrowUp') {
         movement.faster = true;
     }
@@ -156,104 +110,13 @@ const onKeyUp = ({ code }) => {
     }
 };
 
-document.addEventListener('keydown', onKeyDown);
-document.addEventListener('keyup', onKeyUp);
+fromEvent(document, 'keydown').pipe().subscribe(onKeyDown);
+fromEvent(document, 'keyup').pipe().subscribe(onKeyUp);
 
 const determineEntityMotion = () => {
-    const newEnts = entities.map((ent, index) => {
-        const otherEnts = [...entities];
-        delete otherEnts[index];
-
-        const attr = { ...ent };
-
-        let hitWall = false;
-        // Wall hit up leftRight
-        if (attr.x + attr.w >= canvasWidth || attr.x <= 0) {
-            attr.dx = -attr.dx;
-            hitWall = true;
-        }
-
-        // Wall hit up down
-        if (attr.y + attr.h >= canvasHeight || attr.y <= 0) {
-            attr.dy = -attr.dy;
-            hitWall = true;
-        }
-
-        if (hitWall) {
-            return attr;
-        }
-
-        // hits item from below
-        otherEnts.forEach((item) => {
-            if (
-                attr.x + attr.w >= item.x &&
-                attr.x <= item.x + item.w &&
-                Math.abs(attr.y - (item.y + item.h)) <= 1
-            ) {
-                attr.dy = item.dy;
-            }
-        });
-
-        // hits item from above
-        otherEnts.forEach((item) => {
-            if (
-                attr.x + attr.w >= item.x &&
-                attr.x <= item.x + item.w &&
-                Math.abs(attr.y + attr.h - item.y) <= 1
-            ) {
-                attr.dy = item.dy;
-            }
-        });
-
-        // hits item from left
-        otherEnts.forEach((item) => {
-            if (
-                attr.y + attr.h >= item.y &&
-                attr.y <= item.y + item.h &&
-                Math.abs(attr.x + attr.w - item.x) <= 1
-            ) {
-                attr.dx = item.dx;
-            }
-        });
-
-        // hits item from right
-        otherEnts.some((item) => {
-            if (
-                attr.y + attr.h >= item.y &&
-                attr.y <= item.y + item.h &&
-                Math.abs(attr.x - (item.x + item.w)) <= 1
-            ) {
-                attr.dx = item.dx;
-            }
-        });
-
-        return attr;
-    });
+    const newEnts = calcMotion(entities);
 
     entities = newEnts;
-};
-
-const rectCircleColliding = (circle, rect) => {
-    var distX = Math.abs(circle.x - rect.x - rect.w / 2);
-    var distY = Math.abs(circle.y - rect.y - rect.h / 2);
-
-    if (distX > rect.w / 2 + circle.r) {
-        return false;
-    }
-    if (distY > rect.h / 2 + circle.r) {
-        return false;
-    }
-
-    if (distX <= rect.w / 2) {
-        return true;
-    }
-    if (distY <= rect.h / 2) {
-        return true;
-    }
-
-    var dx = distX - rect.w / 2;
-    var dy = distY - rect.h / 2;
-    return dx * dx + dy * dy <= circle.r * circle.r;
 };
 
 const updateEntities = () => {
@@ -277,71 +140,15 @@ const renderPlayer = () => {
     drawCircle(player.x, player.y, player.r, player.angle, 'blue');
 };
 
-const drawRect = (posX, posY, w, h, color) => {
-    ctx.beginPath();
-    ctx.rect(Math.round(posX), Math.round(posY), w, h);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.closePath();
-};
-
-const drawCircle = (posX, posY, radius, angle, color) => {
-    ctx.beginPath();
-    ctx.arc(posX, posY, radius, 0, 2 * Math.PI, false);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.closePath();
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'white';
-    ctx.moveTo(posX, posY);
-    const dX = radius * Math.sin((Math.PI * 2 * angle) / 360);
-    const dY = radius * Math.cos((Math.PI * 2 * angle) / 360);
-    ctx.lineTo(posX + dX, posY - dY);
-    ctx.stroke();
-};
-
 const detectPlayerCollision = () => {
     if (entities.some((ent) => rectCircleColliding(player, ent))) {
         wastedOverlay.style.display = 'block';
-        isPaused = true;
+        isPaused$.next(true);
     }
 };
 
 const determinePlayerMotion = () => {
-    const newMotion = {
-        angle: player.angle,
-        acc: player.acc,
-    };
-
-    if (movement.faster) {
-        newMotion.acc = newMotion.acc + 0.1;
-    } else {
-        newMotion.acc = newMotion.acc - 0.01;
-    }
-
-    if (movement.slower) {
-        newMotion.acc = newMotion.acc - 0.05;
-    }
-
-    if (movement.left) {
-        newMotion.angle = player.angle - 1.5;
-    }
-    if (movement.right) {
-        newMotion.angle = player.angle + 1.5;
-    }
-    if (newMotion.angle > 360) {
-        newMotion.angle = newMotion.angle - 360;
-    }
-    if (newMotion.angle < 0) {
-        newMotion.angle = newMotion.angle + 360;
-    }
-    if (newMotion.acc <= 0) {
-        newMotion.acc = 0;
-    }
-    if (newMotion.acc >= topSpeed) {
-        newMotion.acc = topSpeed;
-    }
+    const newMotion = calcPlayerMotion(player, movement);
 
     player.angle = newMotion.angle;
     player.acc = newMotion.acc;
@@ -374,10 +181,6 @@ const updatePlayer = () => {
     player.y = newPosition.y;
 };
 
-const clearCanvas = () => {
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-};
-
 const updateTexts = () => {
     angleText.textContent = player.angle + ' degrees';
     accText.textContent = player.acc.toFixed(2) + ' speed';
@@ -390,12 +193,6 @@ const renderTargets = () => {
         drawRect(target.x, target.y, target.w, target.h, 'orange');
     });
 };
-
-function getRandomInt(min, max) {
-    min = Math.ceil(min);
-    max = Math.floor(max);
-    return Math.floor(Math.random() * (max - min) + min);
-}
 
 const spawnTargets = () => {
     if (targets.length < 3) {
@@ -423,9 +220,6 @@ const handlePoints = () => {
 };
 
 const render = () => {
-    if (isPaused) {
-        return;
-    }
     clearCanvas();
 
     detectTargetHit();
@@ -443,5 +237,17 @@ const render = () => {
 };
 
 setUpGame();
-setInterval(spawnTargets, 3000);
-setInterval(render, 10);
+
+const pointTick$ = interval(3000);
+const tick$ = interval(10);
+const runtime$ = combineLatest([tick$, isPaused$])
+    .pipe(filter(([, paused]) => paused))
+    .subscribe(() => {
+        render();
+    });
+
+combineLatest([pointTick$, isPaused$])
+    .pipe(filter(([, paused]) => paused))
+    .subscribe(() => {
+        spawnTargets();
+    });
