@@ -1,12 +1,12 @@
-const path = require('path')
+const path = require('path');
 
 module.exports = {
     //...
     devServer: {
         static: {
-            directory: path.join(__dirname, 'src'),
+            directory: path.join(__dirname, 'docs'),
         },
         compress: true,
         port: 9000,
     },
-}
+};
