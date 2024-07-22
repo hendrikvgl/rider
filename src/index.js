@@ -1,5 +1,14 @@
-import { fromEvent, interval, BehaviorSubject, combineLatest } from 'rxjs';
-import { tap, scan, startWith, filter } from 'rxjs/operators';
+import {
+    fromEvent,
+    interval,
+    BehaviorSubject,
+    combineLatest,
+    Subject,
+    tap,
+    filter,
+    map,
+    withLatestFrom,
+} from 'rxjs';
 import {
     calcMotion,
     rectCircleColliding,
@@ -8,27 +17,38 @@ import {
 } from './utils.js';
 import { clearCanvas, drawCircle, drawRect } from './rendering.js';
 import { INITIAL_ENTITIES } from './entities.js';
+import { onKeyDown, onKeyUp, updatePlayer } from './player.js';
 
-console.log('hello world');
-
-let togglePause$ = new BehaviorSubject();
-let isPaused$ = togglePause$.pipe(
-    scan((previous) => !previous, false),
-    startWith(false)
-);
+let isPaused$ = new BehaviorSubject(false);
 
 var pauseButton = document.getElementById('pauseButton');
 
 fromEvent(pauseButton, 'click')
     .pipe(
-        tap(() => {
-            togglePause$.next();
+        withLatestFrom(isPaused$),
+        tap(([, paused]) => {
+            isPaused$.next(!paused);
         })
     )
     .subscribe();
 
 const canvasHeight = 600;
 const canvasWidth = 800;
+
+const INITIAL_MOVEMENT = {
+    faster: false,
+    slower: false,
+    left: false,
+    right: false,
+};
+
+const INITIAL_PLAYER = {
+    x: canvasWidth / 2,
+    y: canvasHeight / 2,
+    r: 15,
+    angle: 0,
+    acc: 0,
+};
 
 const wastedOverlay = document.getElementById('wastedOverlay');
 const playAgainButton = document.getElementById('playAgainText');
@@ -37,217 +57,161 @@ const accText = document.getElementById('acc');
 const pointsText = document.getElementById('points');
 const finalPointsText = document.getElementById('finalPoints');
 
-let targets = [];
+const points$ = new BehaviorSubject(0);
+const player$ = new BehaviorSubject({ ...INITIAL_PLAYER });
+const entities$ = new BehaviorSubject(INITIAL_ENTITIES);
+const targets$ = new BehaviorSubject([]);
+const movement$ = new BehaviorSubject({ ...INITIAL_MOVEMENT });
 
-let points = 0;
+const restart$ = new Subject();
 
-let player = {};
+restart$
+    .pipe(
+        tap(() => {
+            isPaused$.next(true);
+            movement$.next(INITIAL_MOVEMENT);
+            player$.next({ ...INITIAL_PLAYER });
+            entities$.next(INITIAL_ENTITIES);
+            targets$.next([]);
 
-const movement = {
-    faster: false,
-    slower: false,
-    left: false,
-    right: false,
-};
+            points$.next(0);
+            wastedOverlay.style.display = 'none';
+            isPaused$.next(false);
+        })
+    )
+    .subscribe();
 
-let entities = [];
+playAgainButton.onclick = () => restart$.next();
 
-const setUpGame = () => {
-    isPaused$.next(false);
-    entities = [...INITIAL_ENTITIES];
+fromEvent(document, 'keydown')
+    .pipe(
+        withLatestFrom(movement$),
+        map(([{ code }, movement]) => {
+            const newMovement = onKeyDown({
+                movement: movement,
+                code,
+                restart: () => restart$.next(),
+            });
+            if (newMovement) {
+                movement$.next(newMovement);
+            }
+        })
+    )
+    .subscribe();
 
-    player = {
-        x: canvasWidth / 2,
-        y: canvasHeight / 2,
-        r: 15,
-        angle: 0,
-        acc: 0,
-    };
+fromEvent(document, 'keyup')
+    .pipe(
+        withLatestFrom(movement$),
+        map(([{ code }, movement]) => {
+            const newMovement = onKeyUp({
+                movement: movement,
+                code,
+            });
+            if (newMovement) {
+                movement$.next(newMovement);
+            }
+        })
+    )
+    .subscribe();
 
-    points = 0;
+const movedEntitites$ = entities$.pipe(
+    filter((ents) => !!ents),
+    map(calcMotion),
+    map((ents) =>
+        ents.map((ent) => ({
+            ...ent,
+            x: ent.x + ent.dx,
+            y: ent.y + ent.dy,
+        }))
+    ),
+    tap((ents) => {
+        ents.forEach((ent) => drawRect(ent.x, ent.y, ent.w, ent.h, ent.color));
+    })
+);
 
-    targets = [];
-};
+combineLatest(player$, movedEntitites$)
+    .pipe(
+        tap(([player, entities]) => {
+            if (entities.some((ent) => rectCircleColliding(player, ent))) {
+                wastedOverlay.style.display = 'block';
+                isPaused$.next(true);
+            }
+        })
+    )
+    .subscribe();
 
-const restart = () => {
-    setUpGame();
-    wastedOverlay.style.display = 'none';
-    isPaused$.next(false);
-};
+const movedPlayer$ = player$.pipe(
+    withLatestFrom(movement$),
+    map(([player, movement]) => {
+        const newMotion = calcPlayerMotion(player, movement);
 
-playAgainButton.onclick = restart;
+        player.angle = newMotion.angle;
+        player.acc = newMotion.acc;
+        return player;
+    }),
+    map(updatePlayer),
+    tap((player) => {
+        drawCircle(player.x, player.y, player.r, player.angle, 'blue');
+    })
+);
 
-const onKeyDown = ({ code }) => {
-    if (code === 'KeyW' || code === 'ArrowUp') {
-        movement.faster = true;
-    }
-    if (code === 'KeyS' || code === 'ArrowDown') {
-        movement.slower = true;
-    }
-    if (code === 'KeyA' || code === 'ArrowLeft') {
-        movement.left = true;
-    }
-    if (code === 'KeyD' || code === 'ArrowRight') {
-        movement.right = true;
-    }
-    if (code === 'Space') {
-        restart();
-    }
-};
+combineLatest(points$, player$)
+    .pipe(
+        tap(([points, player]) => {
+            angleText.textContent = player.angle + ' degrees';
+            accText.textContent = player.acc.toFixed(2) + ' speed';
+            finalPointsText.textContent = points.toFixed(0);
+            pointsText.textContent = points.toFixed(0);
+        })
+    )
+    .subscribe();
 
-const onKeyUp = ({ code }) => {
-    if (code === 'KeyW' || code === 'ArrowUp') {
-        movement.faster = false;
-    }
-    if (code === 'KeyS' || code === 'ArrowDown') {
-        movement.slower = false;
-    }
-    if (code === 'KeyA' || code === 'ArrowLeft') {
-        movement.left = false;
-    }
-    if (code === 'KeyD' || code === 'ArrowRight') {
-        movement.right = false;
-    }
-};
+combineLatest(player$, targets$)
+    .pipe(
+        // filter(([player, targets]) => !!player || !!targets),
+        withLatestFrom(points$),
+        tap(([[player, targets], points]) => {
+            targets.forEach((target, index) => {
+                drawRect(target.x, target.y, target.w, target.h, 'orange');
 
-fromEvent(document, 'keydown').pipe().subscribe(onKeyDown);
-fromEvent(document, 'keyup').pipe().subscribe(onKeyUp);
-
-const determineEntityMotion = () => {
-    const newEnts = calcMotion(entities);
-
-    entities = newEnts;
-};
-
-const updateEntities = () => {
-    determineEntityMotion();
-
-    const newEnts = entities.map((ent) => ({
-        ...ent,
-        x: ent.x + ent.dx,
-        y: ent.y + ent.dy,
-    }));
-    entities = newEnts;
-};
-
-const renderEntities = () => {
-    entities.forEach((ent) => {
-        drawRect(ent.x, ent.y, ent.w, ent.h, ent.color);
-    });
-};
-
-const renderPlayer = () => {
-    drawCircle(player.x, player.y, player.r, player.angle, 'blue');
-};
-
-const detectPlayerCollision = () => {
-    if (entities.some((ent) => rectCircleColliding(player, ent))) {
-        wastedOverlay.style.display = 'block';
-        isPaused$.next(true);
-    }
-};
-
-const determinePlayerMotion = () => {
-    const newMotion = calcPlayerMotion(player, movement);
-
-    player.angle = newMotion.angle;
-    player.acc = newMotion.acc;
-};
-
-const updatePlayer = () => {
-    const newPosition = { x: player.x, y: player.y };
-
-    const dX = player.acc * Math.sin((Math.PI * 2 * player.angle) / 360);
-    const dY = player.acc * Math.cos((Math.PI * 2 * player.angle) / 360);
-
-    newPosition.x = player.x + dX;
-    newPosition.y = player.y - dY;
-
-    if (newPosition.x - player.r < 0) {
-        newPosition.x = 0 + player.r;
-    }
-    if (newPosition.x + player.r > canvasWidth) {
-        newPosition.x = canvasWidth - player.r;
-    }
-    if (newPosition.y - player.r < 0) {
-        newPosition.y = 0 + player.r;
-    }
-
-    if (newPosition.y + player.r > canvasHeight) {
-        newPosition.y = canvasHeight - player.r;
-    }
-
-    player.x = newPosition.x;
-    player.y = newPosition.y;
-};
-
-const updateTexts = () => {
-    angleText.textContent = player.angle + ' degrees';
-    accText.textContent = player.acc.toFixed(2) + ' speed';
-    finalPointsText.textContent = points.toFixed(0);
-    pointsText.textContent = points.toFixed(0);
-};
-
-const renderTargets = () => {
-    targets.forEach((target) => {
-        drawRect(target.x, target.y, target.w, target.h, 'orange');
-    });
-};
-
-const spawnTargets = () => {
-    if (targets.length < 3) {
-        const newTarget = {
-            x: getRandomInt(10, canvasWidth - 10),
-            y: getRandomInt(10, canvasHeight - 10),
-            w: 10,
-            h: 10,
-        };
-        targets.push(newTarget);
-    }
-};
-
-const detectTargetHit = () => {
-    targets.forEach((target, index) => {
-        if (rectCircleColliding(player, target)) {
-            targets.splice(index, 1);
-            points = points + 100;
-        }
-    });
-};
-
-const handlePoints = () => {
-    points = points - 0.01;
-};
-
-const render = () => {
-    clearCanvas();
-
-    detectTargetHit();
-    detectPlayerCollision();
-    determinePlayerMotion();
-    updatePlayer();
-    updateEntities();
-    handlePoints();
-
-    renderPlayer();
-    renderTargets();
-
-    renderEntities();
-    updateTexts();
-};
-
-setUpGame();
+                if (rectCircleColliding(player, target)) {
+                    const newTargets = [...targets.splice(index, 1)];
+                    targets$.next(newTargets);
+                    points$.next(points + 100);
+                }
+            });
+        })
+    )
+    .subscribe();
 
 const pointTick$ = interval(3000);
 const tick$ = interval(10);
-const runtime$ = combineLatest([tick$, isPaused$])
-    .pipe(filter(([, paused]) => paused))
-    .subscribe(() => {
-        render();
-    });
+tick$
+    .pipe(
+        withLatestFrom(isPaused$, movedEntitites$, movedPlayer$, points$),
+        filter(([, paused]) => !paused),
+        tap(([, , movedEntities, movedPlayer, points]) => {
+            clearCanvas();
+            entities$.next(movedEntities);
+            player$.next(movedPlayer);
+            points$.next(points - 0.01);
+        })
+    )
+    .subscribe();
 
-combineLatest([pointTick$, isPaused$])
-    .pipe(filter(([, paused]) => paused))
-    .subscribe(() => {
-        spawnTargets();
-    });
+pointTick$
+    .pipe(
+        withLatestFrom(isPaused$, targets$),
+        filter(([, isPaused, targets]) => !isPaused && targets.length <= 3),
+        tap(([, , targets]) => {
+            const newTarget = {
+                x: getRandomInt(10, canvasWidth - 10),
+                y: getRandomInt(10, canvasHeight - 10),
+                w: 10,
+                h: 10,
+            };
+            console.log(targets);
+            targets$.next([...targets, newTarget]);
+        })
+    )
+    .subscribe();

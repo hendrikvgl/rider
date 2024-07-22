@@ -16,11 +16,12 @@ module.exports = {
         filename: 'index.js',
         path: path.resolve(__dirname, 'docs'),
     },
+    devtool: 'source-map',
     devServer: {
         static: {
             directory: path.join(__dirname, 'src'),
         },
-        compress: true,
+        compress: false,
         port: 9000,
     },
 };

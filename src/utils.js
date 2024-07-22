@@ -64,7 +64,7 @@ const calcPlayerMotion = (player, movement) => {
 };
 
 const calcMotion = (entities) =>
-    entities.map((ent, index) => {
+    entities?.map((ent, index) => {
         const otherEnts = [...entities];
         delete otherEnts[index];
 

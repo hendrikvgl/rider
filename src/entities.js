@@ -1,4 +1,4 @@
-const INITIAL_ENTITIES = [
+export const INITIAL_ENTITIES = [
     {
         x: 1,
         y: 1,
@@ -63,5 +63,3 @@ const INITIAL_ENTITIES = [
         color: 'red',
     },
 ];
-
-export { INITIAL_ENTITIES };
