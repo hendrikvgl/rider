@@ -1,35 +1,45 @@
-const canvasHeight = 600;
-const canvasWidth = 800;
+const canvas = document.getElementById('canvas');
+const setupGraphics = () => {
+    canvas.innerHTML = '';
+    const player = document.createElement('div');
+    const innerDiv = document.createElement('div');
+    innerDiv.id = 'visor';
+    player.appendChild(innerDiv);
+    player.id = 'player';
+    player.style.position = 'absolute';
+    canvas.appendChild(player);
+    return player;
+};
 
-var canvas = document.getElementById('myCanvas');
-var ctx = canvas.getContext('2d');
+const drawRect = (posX, posY, w, h, color, id) => {
+    if (!id) {
+        return;
+    }
+    let ent = document.getElementById(id);
+    if (!ent) {
+        const div = document.createElement('div');
+        div.id = id;
+        div.style.position = 'absolute';
+        canvas.appendChild(div);
+        ent = div;
+    }
 
-const drawRect = (posX, posY, w, h, color) => {
-    ctx.beginPath();
-    ctx.rect(Math.round(posX), Math.round(posY), w, h);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.closePath();
+    ent.style.left = `${posX}px`;
+    ent.style.top = `${posY}px`;
+    ent.style.backgroundColor = color;
+    ent.style.width = `${w}px`;
+    ent.style.height = `${h}px`;
 };
 
 const drawCircle = (posX, posY, radius, angle, color) => {
-    ctx.beginPath();
-    ctx.arc(posX, posY, radius, 0, 2 * Math.PI, false);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.closePath();
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'white';
-    ctx.moveTo(posX, posY);
-    const dX = radius * Math.sin((Math.PI * 2 * angle) / 360);
-    const dY = radius * Math.cos((Math.PI * 2 * angle) / 360);
-    ctx.lineTo(posX + dX, posY - dY);
-    ctx.stroke();
+    let player = document.getElementById('player');
+    if (!player) {
+        player = setupGraphics();
+    }
+    player.style.left = `${posX - 15}px`;
+    player.style.top = `${posY - 15}px`;
+    player.style.backgroundColor = color;
+    player.style.rotate = `${angle}deg`;
 };
 
-const clearCanvas = () => {
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-};
-
-export { clearCanvas, drawCircle, drawRect };
+export { drawCircle, drawRect, setupGraphics };

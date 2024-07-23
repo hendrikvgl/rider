@@ -14,8 +14,8 @@ import {
     rectCircleColliding,
     getRandomInt,
     calcPlayerMotion,
-} from './utils.js';
-import { clearCanvas, drawCircle, drawRect } from './rendering.js';
+} from './newton.js';
+import { drawCircle, drawRect, setupGraphics } from './rendering.js';
 import { INITIAL_ENTITIES } from './entities.js';
 import { onKeyDown, onKeyUp, updatePlayer } from './player.js';
 
@@ -65,9 +65,45 @@ const movement$ = new BehaviorSubject({ ...INITIAL_MOVEMENT });
 
 const restart$ = new Subject();
 
+player$
+    .pipe(
+        tap((player) => {
+            drawCircle(player.x, player.y, player.r, player.angle, 'blue');
+        })
+    )
+    .subscribe();
+
+targets$
+    .pipe(
+        tap((targets) =>
+            targets.forEach((target) => {
+                drawRect(
+                    target.x,
+                    target.y,
+                    target.w,
+                    target.h,
+                    'orange',
+                    target.id
+                );
+            })
+        )
+    )
+    .subscribe();
+
+entities$
+    .pipe(
+        tap((ents) =>
+            ents.forEach((ent) =>
+                drawRect(ent.x, ent.y, ent.w, ent.h, ent.color, ent.id)
+            )
+        )
+    )
+    .subscribe();
+
 restart$
     .pipe(
         tap(() => {
+            setupGraphics();
             isPaused$.next(true);
             movement$.next(INITIAL_MOVEMENT);
             player$.next({ ...INITIAL_PLAYER });
@@ -123,10 +159,7 @@ const movedEntitites$ = entities$.pipe(
             x: ent.x + ent.dx,
             y: ent.y + ent.dy,
         }))
-    ),
-    tap((ents) => {
-        ents.forEach((ent) => drawRect(ent.x, ent.y, ent.w, ent.h, ent.color));
-    })
+    )
 );
 
 combineLatest(player$, movedEntitites$)
@@ -149,14 +182,11 @@ const movedPlayer$ = player$.pipe(
         player.acc = newMotion.acc;
         return player;
     }),
-    map(updatePlayer),
-    tap((player) => {
-        drawCircle(player.x, player.y, player.r, player.angle, 'blue');
-    })
+    map(updatePlayer)
 );
-
-combineLatest(points$, player$)
+points$
     .pipe(
+        withLatestFrom(player$),
         tap(([points, player]) => {
             angleText.textContent = player.angle + ' degrees';
             accText.textContent = player.acc.toFixed(2) + ' speed';
@@ -166,51 +196,62 @@ combineLatest(points$, player$)
     )
     .subscribe();
 
-combineLatest(player$, targets$)
+player$
     .pipe(
-        // filter(([player, targets]) => !!player || !!targets),
-        withLatestFrom(points$),
-        tap(([[player, targets], points]) => {
-            targets.forEach((target, index) => {
-                drawRect(target.x, target.y, target.w, target.h, 'orange');
-
+        withLatestFrom(targets$, points$),
+        tap(([player, targets, points]) => {
+            targets.forEach((target) => {
                 if (rectCircleColliding(player, target)) {
-                    const newTargets = [...targets.splice(index, 1)];
+                    const newTargets = [
+                        ...targets.filter(({ id }) => id !== target.id),
+                    ];
                     targets$.next(newTargets);
-                    points$.next(points + 100);
+                    const t = document.getElementById(target.id);
+                    t.remove();
+                    const newPoints = points + 100;
+                    points$.next(newPoints);
                 }
             });
         })
     )
     .subscribe();
 
-const pointTick$ = interval(3000);
+const targetTick$ = interval(3000);
 const tick$ = interval(10);
+const pointTick$ = interval(1000);
 tick$
     .pipe(
-        withLatestFrom(isPaused$, movedEntitites$, movedPlayer$, points$),
+        withLatestFrom(isPaused$, movedEntitites$, movedPlayer$),
         filter(([, paused]) => !paused),
-        tap(([, , movedEntities, movedPlayer, points]) => {
-            clearCanvas();
+        tap(([, , movedEntities, movedPlayer]) => {
             entities$.next(movedEntities);
             player$.next(movedPlayer);
-            points$.next(points - 0.01);
         })
     )
     .subscribe();
 
 pointTick$
     .pipe(
+        withLatestFrom(isPaused$, points$),
+        filter(([, isPaused]) => !isPaused),
+        tap(([, , points]) => {
+            const newPoints = points - 5;
+            points$.next(newPoints);
+        })
+    )
+    .subscribe();
+targetTick$
+    .pipe(
         withLatestFrom(isPaused$, targets$),
-        filter(([, isPaused, targets]) => !isPaused && targets.length <= 3),
+        filter(([, isPaused, targets]) => !isPaused && targets.length < 3),
         tap(([, , targets]) => {
             const newTarget = {
                 x: getRandomInt(10, canvasWidth - 10),
                 y: getRandomInt(10, canvasHeight - 10),
                 w: 10,
                 h: 10,
+                id: `${Math.random().toString(16).slice(2)}_target`,
             };
-            console.log(targets);
             targets$.next([...targets, newTarget]);
         })
     )

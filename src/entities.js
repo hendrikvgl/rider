@@ -7,6 +7,7 @@ export const INITIAL_ENTITIES = [
         dx: 0.4,
         dy: 0.8,
         color: 'red',
+        id: '0',
     },
     {
         x: 580,
@@ -16,6 +17,7 @@ export const INITIAL_ENTITIES = [
         dx: 0.6,
         dy: 0.4,
         color: 'red',
+        id: '1',
     },
     {
         x: 700,
@@ -25,6 +27,7 @@ export const INITIAL_ENTITIES = [
         dx: -0.1,
         dy: -0.1,
         color: 'red',
+        id: '2',
     },
     {
         x: 400,
@@ -34,6 +37,7 @@ export const INITIAL_ENTITIES = [
         dx: 1,
         dy: -1,
         color: 'red',
+        id: '3',
     },
     {
         x: 500,
@@ -43,6 +47,7 @@ export const INITIAL_ENTITIES = [
         dx: 0.8,
         dy: -0.6,
         color: 'red',
+        id: '4',
     },
     {
         x: 150,
@@ -52,6 +57,7 @@ export const INITIAL_ENTITIES = [
         dx: -0.9,
         dy: 0.3,
         color: 'red',
+        id: '5',
     },
     {
         x: 650,
@@ -61,5 +67,6 @@ export const INITIAL_ENTITIES = [
         dx: 1,
         dy: -0.95,
         color: 'red',
+        id: '6',
     },
 ];
